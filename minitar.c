@@ -242,12 +242,24 @@ int create_archive(const char *archive_name, const file_list_t *files) {
 }
 
 int append_files_to_archive(const char *archive_name, const file_list_t *files) {
-    // Need to remove the footer
-    remove_trailing_bytes(archive_name, 1024);
+    // First check that archive exists
+    FILE *check_archive_fp = fopen(archive_name, "rb");
+    int archive_close_result = 0;
+    if (check_archive_fp == NULL) {
+        perror("Archive file does not exist");
+        return 1;
+    }
+    archive_close_result = fclose(check_archive_fp);
 
-    FILE *archive_fp = fopen(archive_name, "wb");
+    // Remove the footer (two 512-byte zero blocks)
+    if (remove_trailing_bytes(archive_name, 1024) != 0) {
+        perror("Error removing bytes");
+        return 1;
+    }
 
-    if (NULL == archive_fp) {
+    // Atempt to open archive
+    FILE *archive_fp = fopen(archive_name, "r+b");
+    if (archive_fp == NULL) {
         perror("Failure opening archive file");
         return 1;
     }
@@ -276,7 +288,7 @@ int append_files_to_archive(const char *archive_name, const file_list_t *files) 
     }
 
     // Close archive fp
-    int archive_close_result = fclose(archive_fp);
+    archive_close_result = fclose(archive_fp);
     if (0 != archive_close_result) {
         perror("Failure closing archive file");
         return 1;
