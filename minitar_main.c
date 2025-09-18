@@ -35,7 +35,18 @@ int main(int argc, char **argv) {
             return 1;
         }
     } else if (strcmp(operation, "-a") == 0) {
-        append_files_to_archive(archive_name, &files);
+        FILE *archive_fp = fopen(archive_name, "r");
+        if (NULL == archive_fp) {
+            fprintf(stderr, "Failed to open archive\n");
+            return 1;
+        } else {
+            append_files_to_archive(archive_name, &files);
+            if (0 != fclose(archive_fp)) {
+                fprintf(stderr, "Failed to close archive");
+                return 1;
+            }
+        }
+
     } else if (strcmp(operation, "-t") == 0) {
         // call get_archive_file_list then print the list out here
     } else if (strcmp(operation, "-u") == 0) {

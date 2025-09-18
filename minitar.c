@@ -131,13 +131,13 @@ int write_end_blocks(FILE *archive_fp) {
     int write_result = fwrite(zero_block, 1, BLOCK_SIZE, archive_fp);
     if (BLOCK_SIZE != write_result) {
         perror("Failure writing first zero block to archive file");
-        return -1;
+        return 1;
     }
 
     write_result = fwrite(zero_block, 1, BLOCK_SIZE, archive_fp);
     if (BLOCK_SIZE != write_result) {
         perror("Failure writing second zero block to archive file");
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -155,7 +155,7 @@ int write_files(FILE *archive_fp, const file_list_t *files) {
         int header_result = fill_tar_header(&header, file_name);
         if (0 != header_result) {
             archive_close_result = fclose(archive_fp);
-            return -1;
+            return 1;
         }
 
         // Attempt to write header to archive file
@@ -163,7 +163,7 @@ int write_files(FILE *archive_fp, const file_list_t *files) {
         if (1 != write_result) {
             perror("Failed to write header to archive file");
             archive_close_result = fclose(archive_fp);
-            return -1;
+            return 1;
         }
 
         // Attempt to open input file
@@ -171,7 +171,7 @@ int write_files(FILE *archive_fp, const file_list_t *files) {
         if (NULL == input_fp) {
             perror("Failed to open input file for read");
             archive_close_result = fclose(archive_fp);
-            return -1;
+            return 1;
         }
 
         char buffer[BLOCK_SIZE];
@@ -190,7 +190,7 @@ int write_files(FILE *archive_fp, const file_list_t *files) {
                 perror("Failure writing to archive file");
                 fclose(input_fp);
                 fclose(archive_fp);
-                return -1;
+                return 1;
             }
         }
 
@@ -198,7 +198,7 @@ int write_files(FILE *archive_fp, const file_list_t *files) {
         if (0 != input_close_result) {
             perror("Failure closing input file");
             fclose(archive_fp);
-            return -1;
+            return 1;
         }
 
         ptr = ptr->next;
@@ -216,28 +216,72 @@ int create_archive(const char *archive_name, const file_list_t *files) {
 
     if (NULL == archive_fp) {
         perror("Error opening archive file for write");
-        return -1;
+        return 1;
     }
 
-    write_files(archive_fp, files);
+    // Attempt to write the files
+    int write_files_result = write_files(archive_fp, files);
+    if (0 != write_files_result) {
+        perror("Error writing files");
+        return 1;
+    }
     // Data should have been written, now we need to add the 2 blocks of padding
     int add_zero_block_result = write_end_blocks(archive_fp);
     if (0 != add_zero_block_result) {
-        fclose(archive_fp);
-        return -1;
+        archive_close_result = fclose(archive_fp);
+        return 1;
     }
     // Close archive fp
     archive_close_result = fclose(archive_fp);
     if (0 != archive_close_result) {
         perror("Failure closing archive file");
-        return -1;
+        return 1;
     }
 
     return 0;
 }
 
 int append_files_to_archive(const char *archive_name, const file_list_t *files) {
-    // TODO: Not yet implemented
+    // Need to remove the footer
+    remove_trailing_bytes(archive_name, 1024);
+
+    FILE *archive_fp = fopen(archive_name, "wb");
+
+    if (NULL == archive_fp) {
+        perror("Failure opening archive file");
+        return 1;
+    }
+
+    // We removed the footer but now we need to position
+    // the fp at the end so that it is in position
+    // to start writing the files
+    int seek_result = fseek(archive_fp, 0, SEEK_END);
+    if (0 != seek_result) {
+        perror("Failure seeking archive file");
+        return 1;
+    }
+
+    // Do the adding of files
+    int write_files_result = write_files(archive_fp, files);
+    if (0 != write_files_result) {
+        perror("Error writing files");
+        return 1;
+    }
+
+    // Now add new footer
+    int add_zero_block_result = write_end_blocks(archive_fp);
+    if (0 != add_zero_block_result) {
+        fclose(archive_fp);
+        return 1;
+    }
+
+    // Close archive fp
+    int archive_close_result = fclose(archive_fp);
+    if (0 != archive_close_result) {
+        perror("Failure closing archive file");
+        return 1;
+    }
+
     return 0;
 }
 
