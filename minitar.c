@@ -5,6 +5,7 @@
 #include <math.h>
 #include <pwd.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
@@ -123,8 +124,115 @@ int remove_trailing_bytes(const char *file_name, size_t nbytes) {
     return 0;
 }
 
+// Helper to do the adding 2 blocks of 512
+int write_end_blocks(FILE *archive_fp) {
+    char zero_block[512] = {0};
+
+    int write_result = fwrite(zero_block, 1, 512, archive_fp);
+    if (512 != write_result) {
+        perror("Failure writing first zero block to archive file");
+        return -1;
+    }
+
+    write_result = fwrite(zero_block, 1, 512, archive_fp);
+    if (512 != write_result) {
+        perror("Failure writing second zero block to archive file");
+        return -1;
+    }
+    return 0;
+}
+
+int write_files(FILE *archive_fp, const file_list_t *files) {
+    node_t *ptr = files->head;
+    int archive_close_result = 0;
+    int input_close_result = 0;
+    // Traverse file list
+    while (NULL != ptr) {
+        tar_header header;
+        const char *file_name = ptr->name;
+
+        // Attempt to create header
+        int header_result = fill_tar_header(&header, file_name);
+        if (0 != header_result) {
+            archive_close_result = fclose(archive_fp);
+            return -1;
+        }
+
+        // Attempt to write header to archive file
+        int write_result = fwrite(&header, sizeof(tar_header), 1, archive_fp);
+        if (1 != write_result) {
+            perror("Failed to write header to archive file");
+            archive_close_result = fclose(archive_fp);
+            return -1;
+        }
+
+        // Attempt to open input file
+        FILE *input_fp = fopen(file_name, "rb");
+        if (NULL == input_fp) {
+            perror("Failed to open input file for read");
+            archive_close_result = fclose(archive_fp);
+            return -1;
+        }
+
+        char buffer[512];
+        size_t bytes_read;
+
+        // Read and write file contents in 512-byte blocks
+        while ((bytes_read = fread(buffer, 1, sizeof(buffer), input_fp)) > 0) {
+            // Check if what we read in was less than 512 -> need to pad
+            if (bytes_read < sizeof(buffer)) {
+                memset(buffer + bytes_read, 0, sizeof(buffer) - bytes_read);
+            }
+
+            // Write the full 512-byte block
+            size_t bytes_wrote = fwrite(buffer, 1, sizeof(buffer), archive_fp);
+            if (bytes_wrote != sizeof(buffer)) {
+                perror("Failure writing to archive file");
+                fclose(input_fp);
+                fclose(archive_fp);
+                return -1;
+            }
+        }
+
+        input_close_result = fclose(input_fp);
+        if (0 != input_close_result) {
+            perror("Failure closing input file");
+            fclose(archive_fp);
+            return -1;
+        }
+
+        ptr = ptr->next;
+    }
+    if (0 != archive_close_result) {
+        perror("Failure closing archive file");
+        return -1;
+    }
+
+    return 0;
+}
 int create_archive(const char *archive_name, const file_list_t *files) {
-    // TODO: Not yet implemented
+    FILE *archive_fp = fopen(archive_name, "wb");
+    int archive_close_result = 0;
+
+    if (NULL == archive_fp) {
+        perror("Error opening archive file for write");
+        return -1;
+    }
+
+    write_files(archive_fp, files);
+    // Data should have been written, now we need to add the 2 blocks of padding
+    int add_zero_block_result = write_end_blocks(archive_fp);
+    if (0 != add_zero_block_result) {
+        fclose(archive_fp);
+        return -1;
+    }
+    // Close archive fp
+    archive_close_result = fclose(archive_fp);
+    if (0 != archive_close_result) {
+        perror("Failure closing archive file");
+        return -1;
+    }
+
     return 0;
 }
 
