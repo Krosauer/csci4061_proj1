@@ -126,16 +126,16 @@ int remove_trailing_bytes(const char *file_name, size_t nbytes) {
 
 // Helper to do the adding 2 blocks of 512
 int write_end_blocks(FILE *archive_fp) {
-    char zero_block[512] = {0};
+    char zero_block[BLOCK_SIZE] = {0};
 
-    int write_result = fwrite(zero_block, 1, 512, archive_fp);
-    if (512 != write_result) {
+    int write_result = fwrite(zero_block, 1, BLOCK_SIZE, archive_fp);
+    if (BLOCK_SIZE != write_result) {
         perror("Failure writing first zero block to archive file");
         return -1;
     }
 
-    write_result = fwrite(zero_block, 1, 512, archive_fp);
-    if (512 != write_result) {
+    write_result = fwrite(zero_block, 1, BLOCK_SIZE, archive_fp);
+    if (BLOCK_SIZE != write_result) {
         perror("Failure writing second zero block to archive file");
         return -1;
     }
@@ -174,7 +174,7 @@ int write_files(FILE *archive_fp, const file_list_t *files) {
             return -1;
         }
 
-        char buffer[512];
+        char buffer[BLOCK_SIZE];
         size_t bytes_read;
 
         // Read and write file contents in 512-byte blocks
