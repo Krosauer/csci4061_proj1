@@ -154,6 +154,7 @@ int write_files(FILE *archive_fp, const file_list_t *files) {
         // Attempt to create header
         int header_result = fill_tar_header(&header, file_name);
         if (0 != header_result) {
+            // Does this need to be error checked?
             archive_close_result = fclose(archive_fp);
             return 1;
         }
@@ -210,6 +211,8 @@ int write_files(FILE *archive_fp, const file_list_t *files) {
 
     return 0;
 }
+
+
 int create_archive(const char *archive_name, const file_list_t *files) {
     FILE *archive_fp = fopen(archive_name, "wb");
     int archive_close_result = 0;
@@ -240,6 +243,7 @@ int create_archive(const char *archive_name, const file_list_t *files) {
 
     return 0;
 }
+
 
 int append_files_to_archive(const char *archive_name, const file_list_t *files) {
     // First check that archive exists
@@ -299,6 +303,50 @@ int append_files_to_archive(const char *archive_name, const file_list_t *files) 
 
 int get_archive_file_list(const char *archive_name, file_list_t *files) {
     // TODO: Not yet implemented
+
+    // Opens Archive and checks if it exists.
+    FILE *fp = fopen(archive_name, "rb");
+    if (fp == NULL) {
+        perror("Archive file does not exist");
+        return 1;
+    }
+
+    char buffer[BLOCK_SIZE];
+
+    int read_result;
+    int seek_result;
+
+    //loops through archive and adds each file name to the files input value
+
+    while(fp != NULL){
+        //Is this the correct way to read in the blocks header and get each individual file name?
+        read_result = fread(buffer, 1, sizeof(buffer), fp);
+        if(read_result <= 0){
+        perror("Error reading file");
+        return 1;
+        }
+
+        file_list_add(files, buffer);
+
+        //This while loop needs to be fixed, how do I determine when I'm at a header block again?
+        while(fp){
+            seek_result = fseek(fp, SEEK_CUR, BLOCK_SIZE);
+
+            //breaks if fp reaches end of file
+            if(fp == NULL){
+                break;
+            }
+            if(seek_result == -1){
+                perror("Error seeking on file");
+                return 1;
+            }
+        }
+
+    }
+
+
+
+
     return 0;
 }
 
